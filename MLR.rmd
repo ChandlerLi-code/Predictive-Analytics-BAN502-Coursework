@@ -1,0 +1,149 @@
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(lubridate)
+library(GGally)
+library(ggcorrplot)
+library(MASS)
+library(car)
+library(lmtest)
+library(splines)
+
+```
+
+```{r}
+bike <- read_csv("bike_cleaned.csv")  # Replace with actual file path
+summary(bike)
+str(bike)
+
+```
+
+```{r}
+# Convert `dteday` to Date
+bike <- bike %>% mutate(dteday = mdy(dteday))
+
+# Convert character variables to factors
+bike <- bike %>% mutate_if(is.character, as_factor)
+
+# Convert `hr` to a factor
+bike <- bike %>% mutate(hr = as_factor(hr))
+
+```
+
+```{r Question 1}
+# Select numeric columns and exclude specific ones
+numeric_data <- bike %>%
+  dplyr::select(where(is.numeric)) %>%
+  dplyr::select(-c(registered, casual, instant, count))
+
+cor(numeric_data, bike$count)
+```
+
+```{r question 2}
+#Look at the plot to find the season with the highest median count.
+ggplot(bike, aes(season, count)) + 
+  geom_boxplot()
+```
+
+```{r question 3}
+# Build a linear regression model with `hr`
+hr_model <- linear_reg() %>%
+  set_engine("lm") %>%
+  fit(count ~ hr, data = bike)
+
+# Number of dummy variables
+n_dummy <- nlevels(bike$hr) - 1  # Dummy variables = Number of levels - 1
+print(n_dummy)
+
+```
+
+```{r question 4}
+#The base level is the first level of the hr factor.
+levels(bike$hr)
+```
+
+```{r quesrion 5}
+# Get model coefficients
+hr_coefs <- tidy(hr_model)
+
+# Add intercept to coefficients for each hour
+predicted_rides <- hr_coefs %>% 
+  mutate(predicted_rides = ifelse(term == "(Intercept)", estimate, estimate + hr_coefs$estimate[1])) %>% 
+  arrange(desc(predicted_rides))
+
+print(predicted_rides)
+```
+
+```{r question 6}
+ggplot(bike, aes(temp, count)) +
+  geom_point(alpha = 0.5) + 
+  geom_smooth(method = 'lm', se = FALSE, color= 'blue')
+```
+
+```{r question 7}
+#Build a regression model with hr and temp to predict count.
+
+#Build the model
+hr_temp_model <- linear_reg() %>%
+  set_engine('lm') %>%
+  fit(count ~ hr + temp, bike)
+
+#Find the coef for "hr23"
+hr23_coef <- tidy(hr_temp_model) %>% dplyr::filter(term == "hr23")
+print(hr23_coef$estimate)
+```
+
+```{r question 8}
+# Find the adjusted R-squared
+adj_r2 <- glance(hr_temp_model)$adj.r.squared
+print(round(adj_r2, 4))
+```
+
+```{r question 9}
+temp_atemp_model <- linear_reg() %>%
+  set_engine('lm') %>%
+  fit(count ~ temp + atemp, bike)
+
+adj_r2_atemp <- glance(temp_atemp_model)$adj.r.squared
+print(round(adj_r2_atemp, 4))
+```
+
+```{r question 10}
+#Check the significance of temp and atemp.
+#Check p-values
+tidy(temp_atemp_model)
+```
+
+```{r question 11}
+# Use the `car` package to calculate VIF
+library(car)
+
+#If VIF values are greater than 10, multicollinearity is a significant issue.
+
+# Refit the model with base R (since VIF works on `lm`)
+model_lm <- lm(count ~ temp + atemp, data = bike)
+
+# Calculate VIF
+vif(model_lm)
+
+```
+
+```{r question 12}
+# Create a table to compare
+table(bike$workingday, bike$weekday, bike$holiday)
+```
+
+```{r question 13}
+# Full model with all predictors
+allmod <- lm(count ~ season + mnth + hr + holiday + weekday + workingday + 
+               weathersit + temp + atemp + hum + windspeed, data = bike)
+
+# Stepwise regression
+stepwise_model <- stepAIC(allmod, direction = "backward")
+
+# Check removed variables
+removed_var <- setdiff(names(coef(allmod)), names(coef(stepwise_model)))
+print(removed_var)
+
+```
+

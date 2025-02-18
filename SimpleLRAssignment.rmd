@@ -1,0 +1,75 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(GGally)
+library(lmtest)
+air = airquality
+```
+
+```{r}
+nrow(air)
+ncol(air)
+any(is.na(air$Ozone)) # check if any row in Column Ozone has empty data
+```
+
+```{r}
+air2 = air %>% drop_na() #drop all rows with empty data
+nrow(air2)
+ncol(air2)
+```
+
+```{r}
+#Check correlations between variables in the dataset
+ggpairs(air2)
+ggcorr(air2, label = TRUE)
+```
+
+```{r}
+# Plot “Temp” (x-axis) vs “Ozone” (y-axis). Describe the relationship.
+ggplot(air2, aes(Temp, Ozone)) + 
+  geom_point() +
+  geom_smooth(method = "lm", color = "blue") +
+  theme_minimal()
+```
+
+```{r}
+# Build the Model Using Tidymodels
+
+# Step 1: Recipe
+ozone_recipe = recipe(Ozone ~ Temp, air2)
+
+#Step 2: Model
+ozone_mod = set_engine(linear_reg(), "lm")
+
+#Step 3: Workflow
+ozone_workflow = 
+  workflow() %>% 
+  add_model(ozone_mod) %>%
+  add_recipe(ozone_recipe)
+
+#Step 4: Fit the Model - Fit the workflow to the dataset
+ozone_fit = fit(ozone_workflow, air2)
+
+#Examine the Model
+summary(ozone_fit$fit$fit$fit)
+
+```
+
+```{r}
+ozone_fit$fit$fit$fit$coefficients #Slope
+summary(ozone_fit$fit$fit$fit)$r.squared #R Square
+confint(ozone_fit$fit$fit$fit, level = 0.95) # 95% Confidence Intervals
+predict(ozone_fit, new_data = tibble(Temp = 80)) #predicted “Ozone” value when “Temp” is 80
+```
+
+```{r}
+dwtest(ozone_fit$fit$fit$fit)
+#p-value = 0.2123: Since the p-value is greater than 0.05, there is insufficient evidence to reject the null hypothesis of no autocorrelation. This implies that there is no significant autocorrelation present in your residuals.
+```
+

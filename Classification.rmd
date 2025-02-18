@@ -1,0 +1,199 @@
+```{r}
+library(tidyverse)
+library(tidymodels)
+library(e1071)
+library(ROCR)
+
+parole <- read_csv("parole.csv")
+```
+
+```{r}
+parole <- parole %>% mutate(
+  male = factor(male, levels = c(0, 1), labels = c("Female", "Male")),
+  race = factor(race, levels = c(1, 2), labels = c("White", "Non-white")),
+  state = factor(state, levels = c(1, 2, 3, 4), labels = c("Other", "KY", "LA", "VA")),
+  crime = factor(crime, levels = c(1, 2, 3, 4), labels = c("Other", "Larceny", "Drug", "Driving")),
+  multiple.offenses = factor(multiple.offenses, levels = c(0, 1), labels = c("Other", "Multiple")),
+  violator = factor(violator, levels = c(0, 1), labels = c("No", "Yes"))
+)
+```
+
+```{r}
+# Q1: How many parolees ended up violating parole?
+sum(parole$violator == "Yes")
+```
+
+```{r}
+# Q2: How many rows of data are in the training set?
+
+set.seed(12345)
+
+parole_split = initial_split(parole, prop = 0.7, strata = violator)
+
+train <- training(parole_split)
+test <- testing(parole_split)
+
+train = train %>% mutate(violator = fct_relevel(violator, c("No","Yes")))
+
+nrow(train)
+```
+
+```{r}
+# Q3: Violation rate by Gender
+train %>%
+  group_by(male) %>%
+  summarise(violation_rate = mean(violator == "Yes"))
+```
+
+```{r}
+# Q4: Violation rate by State
+train %>%
+  group_by(state) %>%
+  summarise(violation_rate = mean(violator == "Yes"))
+```
+
+```{r}
+# Q5: violation rate by max sentence
+train %>%
+  group_by(max.sentence) %>%
+  summarise(violation_rate = mean(violator == "Yes")) %>%
+  ggplot(aes(max.sentence, violation_rate)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+```{r}
+# Q6: Which state is the base level in the model summary? 
+# Q7:  To two decimal places, what is the AIC of the model with “state” to predict “violator”? 
+
+#base level state
+levels(train$state)[1]
+
+# Define the logistic regression model
+state_model <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification")
+
+# Fit the model using only "state"
+state_fit <- state_model %>%
+  fit(violator ~ state, train)
+
+# Extract AIC
+round(AIC(state_fit$fit), 2)
+```
+
+```{r}
+# Q8: Which variables are significant in the resulting model?
+
+# Create a logistic regression model using 'state', 'multiple.offenses', and 'race'
+
+multiple_log_reg <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification") %>%
+  fit(violator ~ state + multiple.offenses + race, train)
+
+tidy(multiple_log_reg)
+```
+
+```{r}
+# Q9: Use your model from Question 8 to determine the probability (to two decimal places) that the following parolee will violate parole: The parolee is in Louisiana, has multiple offenses, and is white.
+
+new_data <- tibble(state = "LA", multiple.offenses = "Multiple", race = "White")
+
+round(predict(multiple_log_reg, new_data, type = "prob"), 2)
+
+```
+
+```{r}
+# Q10: What is the value of this threshold?
+
+# Fit the logistic regression model
+logit_model <- glm(violator ~ state + multiple.offenses + race, data = train, family = binomial)
+summary(logit_model)
+
+# Predict probabilities on the training set
+train_pred <- predict(logit_model, type = "response")
+
+# Create a prediction object for ROCR
+pred <- prediction(train_pred, train$violator)
+
+# Calculate performance measures
+perf <- performance(pred, "tpr", "fpr")
+
+# Plot the ROC curve
+plot(perf, colorize = TRUE, main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2)
+
+# Find the optimal threshold
+opt_threshold <- performance(pred, "sens", "spec")@alpha.values[[1]][which.max(
+  performance(pred, "sens", "spec")@y.values[[1]] + performance(pred, "sens", "spec")@x.values[[1]]
+)]
+
+# Print the optimal threshold
+cat("Optimal Threshold:", round(opt_threshold, 4), "\n")
+
+```
+
+```{r}
+# Q11: Calculate accuracy using the best threshold
+# Classify observations using the threshold of 0.2016
+train_class <- ifelse(train_pred >= 0.2016, "Yes", "No")
+
+# Calculate accuracy
+accuracy <- mean(train_class == train$violator)
+cat("Accuracy:", round(accuracy, 3), "\n")
+
+
+```
+
+```{r}
+# Q12: Calculate sensitivity
+# Create a confusion matrix
+conf_matrix <- table(Predicted = train_class, Actual = train$violator)
+
+# Calculate sensitivity
+sensitivity <- conf_matrix["Yes", "Yes"] / sum(conf_matrix[, "Yes"])
+cat("Sensitivity:", round(sensitivity, 3), "\n")
+```
+
+```{r}
+# Q13: Determine the best threshold for accuracy
+# Define a function to calculate accuracy for a given threshold
+calculate_accuracy <- function(threshold) {
+  train_class <- ifelse(train_pred >= threshold, "Yes", "No")
+  accuracy <- mean(train_class == train$violator)
+  return(accuracy)
+}
+
+# Evaluate accuracy for different thresholds
+thresholds <- c(0.2, 0.3, 0.4, 0.5)
+accuracies <- sapply(thresholds, calculate_accuracy)
+
+# Print accuracies
+cat("Accuracies for thresholds 0.2, 0.3, 0.4, 0.5:", round(accuracies, 3), "\n")
+
+# Find the threshold with the highest accuracy
+best_threshold <- thresholds[which.max(accuracies)]
+cat("Best Threshold for Accuracy:", best_threshold, "\n")
+
+
+```
+
+```{r}
+# Predict probabilities on the testing set
+test_probs <- predict(multiple_log_reg, test, type = "prob") %>%
+  bind_cols(test)
+
+# Apply best threshold from Question 13
+test_probs <- test_probs %>%
+  mutate(pred_class = ifelse(.pred_Yes > best_threshold_acc, "Yes", "No")) %>%
+  mutate(pred_class = as.factor(pred_class))
+
+# Compute accuracy on testing set
+accuracy_test <- accuracy(test_probs, truth = violator, estimate = pred_class)
+
+# Print rounded accuracy
+round(accuracy_test$.estimate, 3)
+
+```
+

@@ -1,0 +1,60 @@
+```{r}
+library(tidyverse)
+library(lubridate)
+library(tidymodels)
+
+bike <- read_csv("bike_cleaned.csv")
+
+bike <- bike %>%
+  dplyr::mutate(dteday = ymd(dteday)) %>%
+  dplyr::mutate_if(is.character, as.factor) %>%
+  dplyr::mutate(hr = as.factor(hr))
+```
+
+```{r}
+set.seed(1234)
+bike_split <- initial_split(bike, prop = 0.7, strata = count)
+train <- training(bike_split)
+test <- testing(bike_split)
+
+nrow(train)
+```
+
+```{r Build a Linear Regression Model}
+bike_recipe <- recipe(count ~ season + mnth + hr + holiday + weekday + temp + weathersit, train)
+
+lm_model <- linear_reg() %>%
+  set_engine("lm")
+
+lm_workflow <- workflow() %>%
+  add_recipe(bike_recipe) %>%
+  add_model(lm_model)
+
+lm_fit <- fit(lm_workflow, train)
+
+round(summary(lm_fit$fit$fit$fit)$adj.r.squared, 4)
+```
+
+```{r}
+# Make predictions on the training set
+predict_train <- predict(lm_fit, train)
+
+# Combine predictions with the training data
+train_results <- train %>%
+  bind_cols(predict_train)
+
+# Plot a histogram of the predictions
+ggplot(train_results, aes(x = .pred)) +
+  geom_histogram(binwidth = 50, fill = "blue", color = "black") +
+  theme_bw() +
+  labs(title = "Distribution of Predicted Bike Rides", x = "Predicted Count", y = "Frequency")
+
+```
+
+```{r}
+lm_fit %>% 
+  predict(test) %>%
+  bind_cols(test) %>%
+  metrics(truth = count, estimate = .pred)
+```
+

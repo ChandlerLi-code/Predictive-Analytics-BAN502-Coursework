@@ -1,0 +1,130 @@
+```{r}
+library(tidyverse)
+library(cluster)
+library(factoextra)
+library(dendextend)
+
+trucks <- read_csv("trucks.csv")
+head(trucks)
+```
+
+```{r}
+# Plot relationship between Distance and Speeding
+
+ggplot(trucks, aes(Distance, Speeding)) + 
+  geom_point() +
+  labs(title = "Relationship Between Distance and Speeding", x = "Distance", y = "Speeding")
+```
+
+```{r}
+# scale and center the data
+trucks_cleaned <- trucks %>%
+  select(Distance, Speeding) %>%
+  scale() %>%
+  as.data.frame()
+
+# Check the max value of the scaled Distance variable
+
+max_distance <- max(trucks_cleaned$Distance)
+round(max_distance, 4)
+```
+
+```{r}
+# Perform k-means clustering with k=2 steps:
+
+# set seed for reproducibility
+set.seed(64)
+
+# Perform k-means clustering with k=2
+kmeans_result <- kmeans(trucks_cleaned, centers = 2)
+
+# Add clusters to the original data frame
+trucks <- trucks %>%
+  mutate(Cluster = kmeans_result$cluster)
+
+# Visualize the clusters
+ggplot(trucks, aes(Distance, Speeding, color = as.factor(Cluster))) + 
+  geom_point() +
+  labs(title = "k-means Clustering with k=2",
+       x = "Distance",
+       y = "Speeding",
+       color = "Cluster")
+```
+
+```{r}
+# Visualize Clusters for k=1 to k=8
+
+#The optimal number of clusters (kin Question 4 is determined using the Elbow Method. This method involves plotting the number of clusters (k) against the Within-Cluster Sum of Squares (WCSS) and looking for the "elbow point," where the rate of decrease in WCSS slows down significantly.
+
+# Set seed for reproducibility
+set.seed(412)
+
+# Create a visualization for k=1 to k=8
+fviz_nbclust(trucks_cleaned, kmeans, method = "wss", k.max = 8) +
+  labs(title = "Optimal Number of Clusters")
+```
+
+```{r}
+# Create a plot of k versus within cluster sum of squares
+
+# Calculate within-cluster sum of squares for k=1 to 8
+wss <- sapply(1:8, function(k) {
+  kmeans(trucks_cleaned, centers = k, nstart = 10)$tot.withinss})
+
+# sapply(1:8, function(k) { ... })
+# This is a loop that iterates over values of k from 1 to 8.
+# For each value of k, it performs k-means clustering and calculates the Within-Cluster Sum of Squares (WCSS).
+
+# kmeans(trucks_cleaned, centers = k, nstart = 10)
+# This performs k-means clustering on the trucks_cleaned dataset.
+# centers = k: Specifies the number of clusters (k) for the current iteration.
+# nstart = 10: Runs k-means 10 times with different initial centroids and selects the best result (to avoid local optima).
+
+# $tot.withinss:
+# This extracts the Total Within-Cluster Sum of Squares (WCSS) for the current clustering result.
+# WCSS measures the compactness of the clusters. Lower values indicate tighter clusters.
+# wss <- ...:
+# Stores the WCSS values for each k in a vector called wss.
+
+plot(1:8, wss, type = "b", pch = 19, frame = FALSE,
+     xlab = "Number of Cluster (k)",
+     ylab = "Within-Cluster Sum of Sqaures",
+     main = "Elbow Method for Optimal k")
+
+# plot(1:8, wss, ...):
+# Creates a plot with k (1 to 8) on the x-axis and WCSS (wss) on the y-axis.
+# 
+# type = "b":
+# Specifies that the plot should include both points (p) and lines (l) connecting them.
+# 
+# pch = 19:
+# Sets the point style to solid circles.
+# 
+# frame = FALSE:
+# Removes the box around the plot.
+# 
+# xlab and ylab:
+# Labels for the x-axis and y-axis, respectively.
+# 
+# main = "Elbow Method for Optimal k":
+# Adds a title to the plot.
+```
+
+```{r}
+# Repeat k-Means Clustering with Optimal k = 4
+
+set.seed(64)
+
+kmeans_result_optimal <- kmeans(trucks_cleaned, centers = 4)
+
+trucks <- trucks %>%
+  mutate(Cluster_Optimal = kmeans_result_optimal$cluster)
+
+ggplot(trucks, aes(Distance, Speeding, color = as.factor(Cluster_Optimal))) + 
+  geom_point() +
+  labs(title = "k-means Clustering with Optimal k=4",
+       x = "Distance",
+       y = "Speeding",
+       color = "Cluster")
+```
+

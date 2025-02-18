@@ -1,0 +1,56 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+```{r}
+library(tidyverse)
+options(repos = c(CRAN = "https://cran.r-project.org"))
+```
+```{r}
+diamond_data = diamonds
+ncol(diamond_data)
+nrow(diamond_data)
+# Q1 How many rows in the dataset? Answer: 53940
+# Q2 How many columns in the dataset? Answer: 10
+```
+
+```{r}
+ggplot(diamond_data, aes(carat, price)) + geom_point()
+```
+```{r}
+ggplot(diamond_data, aes(carat, price, color=cut)) + geom_point()
+```
+```{r}
+ggplot(diamond_data, aes(carat, price, color=cut)) + geom_point() + facet_wrap(~color)
+```
+
+```{r}
+library(readr)
+Inventory <- read_csv("InventoryData.csv")
+head(Inventory)
+class(Inventory$Supplier)
+```
+```{r}
+mean(Inventory$`On Hand`, na.rm = TRUE)
+```
+
+```{r}
+InventoryA = filter(Inventory, Supplier == "A")
+nrow(InventoryA)
+```
+
+```{r}
+InventoryA = mutate(InventoryA, OnHandRatio = `On Hand` / `Annual Demand`)
+head(InventoryA)
+```
+
+```{r}
+avg_cost <- InventoryA %>%
+  group_by(`Item SKU`) %>%
+  summarize(SKUAvgCost = mean(`Cost per Unit ($)`, na.rm = TRUE))
+
+avg_cost %>% filter(`Item SKU` == "011")
+```
+

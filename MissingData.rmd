@@ -1,0 +1,75 @@
+```{r}
+library(tidyverse)
+library(VIM)
+library(mice)
+
+grades <- read_csv("class-grades.csv")
+```
+
+```{r}
+# For which variables is there missing data (select all variables with missingness)?
+
+missing_data <- colSums(is.na(grades))
+missing_data
+
+#is.na(grades) returns a logical matrix where TRUE indicates a missing value.
+
+#colSums() sums up the TRUE values (missing data) for each column.
+```
+
+```{r}
+# Are there any students that are missing multiple pieces of data?  
+
+aggr(grades, numbers = TRUE, sortVars = TRUE)
+```
+
+```{r}
+# Use row-wise deletion of missing values to create a new data frame. How many rows remain in this data frame?  
+
+grades2 <- na.omit(grades)
+nrow(grades2)
+
+# na.omit() removes rows with any missing values.
+
+# nrow() counts the number of rows in the new data frame.
+```
+
+```{r}
+# Column-wise deletion removes columns with any missing values.
+
+grades3 <- grades[, colSums(is.na(grades)) == 0]
+ncol(grades3)
+
+# colSums(is.na(grades)) == 0 identifies columns with no missing values.
+
+# grades[, ...] subsets the data frame to keep only those columns.
+
+```
+
+```{r}
+# Use the "mice" package to impute the missing data in this dataset. Set "m = 5" and "method = "pmm"" in the imputation. You MUST use a random number seed of 123 for this imputation. What is the mean value for the "Final" variable after imputation (to two decimal places)?
+
+set.seed(123)
+
+imputed_data <- mice(grades, m = 5, method = "pmm")
+
+completed_data <- complete(imputed_data)
+
+mean_final <- mean(completed_data$Final, na.rm = TRUE)
+
+round(mean_final,2)
+
+# set.seed(123) ensures reproducibility.
+
+# mice() performs multiple imputation:
+
+# m = 5 creates 5 imputed datasets.
+
+# method = "pmm" uses Predictive Mean Matching for imputation.
+
+#complete() extracts one of the imputed datasets.
+
+# mean(completed_data$Final, na.rm = TRUE) calculates the mean of the Final variable after imputation.
+
+```
+

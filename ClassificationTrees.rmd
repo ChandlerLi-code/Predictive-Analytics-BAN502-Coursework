@@ -1,0 +1,147 @@
+```{r}
+# Load required libraries
+library(tidyverse)      # For data manipulation and visualization
+library(tidymodels)     # For modeling and machine learning
+library(caret)          # For classification and regression training
+library(rpart)          # For building classification trees
+library(rpart.plot)     # For plotting classification trees
+library(rattle)         # For advanced tree visualization
+library(RColorBrewer)   # For color palettes in plots
+```
+
+```{r}
+heart <- read_csv("heart_disease-1.csv")
+
+# Convert specified variables to factors
+heart <- heart %>%
+  mutate(
+    Sex = as.factor(Sex),
+    ChestPainType = as.factor(ChestPainType),
+    RestingECG = as.factor(RestingECG),
+    ExerciseAngina = as.factor(ExerciseAngina),
+    ST_Slope = as.factor(ST_Slope),
+    HeartDisease = as.factor(ifelse(HeartDisease == 1, "Yes", "No"))
+  )
+```
+
+```{r}
+# Question 1: Split the Data into Training and Testing Sets
+set.seed(12345)
+
+data_split <- initial_split(heart, prop = 0.7, strata = HeartDisease)
+
+train <- training(data_split)
+test <- testing(data_split)
+
+nrow(train)
+```
+
+```{r}
+# Question 2: Create and Plot a Classification Tree
+set.seed(12345)
+
+tree_model <- rpart(HeartDisease ~ ., train, method = "class")
+
+rpart.plot(tree_model)
+```
+
+```{r}
+# Question 3: Examine Complexity Parameter (cp) Values
+
+# Print the cp table
+print(tree_model$cptable)
+
+# Identify the optimal cp value (minimized xerror)
+optimal_cp <- tree_model$cptable[which.min(tree_model$cptable[, "xerror"]), "CP"]
+round(optimal_cp, 2)
+```
+
+```{r}
+# Question 4: Tune cp Using 5-Fold Cross-Validation
+
+set.seed(123)
+
+tune_grid <- expand.grid(cp = seq(0, 0.2, length.out = 25))
+# The expand.grid() function creates a grid of cp values to try. Here, 25 values between 0 and 0.2 are generated.
+
+folds <- vfold_cv(train, v = 5)
+# The vfold_cv() function sets up 5-fold cross-validation.
+
+tree_tune <- train(
+  HeartDisease ~ .,
+  data = train,
+  method = "rpart",
+  trControl = trainControl(method = "cv", number = 5),
+  tuneGrid = tune_grid
+)
+# The train() function trains the model using 5-fold cross-validation and the specified cp values.
+
+ggplot(tree_tune) +
+  labs(title = "cp vs. Model Performance")
+# The ggplot() function visualizes the relationship between cp and model performance.
+
+```
+
+```{r}
+#Question 5: Optimal cp Value
+
+# Find the optimal cp value
+optimal_cp <- tree_tune$bestTune$cp
+round(optimal_cp, 4)
+# The bestTune component of the tree_tune object contains the optimal cp value.
+```
+
+```{r}
+# Question 6: Plot the Optimal Tree
+
+# Build the final tree with the optimal cp
+final_tree <- rpart(HeartDisease ~ ., data = train, method = "class", control = rpart.control(cp = optimal_cp))
+
+# Plot the final tree
+rpart.plot(final_tree)
+```
+
+```{r}
+# Question 7: Accuracy on the Training Set
+
+# Predict on the training set
+train_pred <- predict(final_tree, train, type = "class")
+
+# Calculate accuracy
+accuracy <- mean(train_pred == train$HeartDisease)
+round(accuracy, 4)
+#The mean() function calculates the proportion of correct predictions (accuracy).
+```
+
+```{r}
+# Calculate sensitivity (true positive rate)
+conf_matrix <- confusionMatrix(train_pred, train$HeartDisease, positive = "Yes")
+
+# Extract sensitivity
+sensitivity <- conf_matrix$byClass["Sensitivity"]
+round(sensitivity, 4)
+
+# The confusionMatrix() function computes a confusion matrix, and byClass["Sensitivity"] extracts the sensitivity (true positive rate).
+```
+
+```{r}
+# Calculate naive accuracy (proportion of the majority class)
+naive_accuracy <- max(prop.table(table(train$HeartDisease)))
+round(naive_accuracy, 4)
+
+# The prop.table() function calculates the proportion of each class, and max() extracts the proportion of the majority class.
+```
+
+```{r}
+# Predict on the testing set
+test_pred <- predict(final_tree, test, type = "class")
+
+# Compute the confusion matrix
+conf_matrix_test <- confusionMatrix(test_pred, test$HeartDisease, positive = "Yes")
+
+# Extract accuracy
+test_accuracy <- conf_matrix_test$overall["Accuracy"]
+test_accuracy
+
+```
+
